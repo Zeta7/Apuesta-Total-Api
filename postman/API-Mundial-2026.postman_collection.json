@@ -1,0 +1,168 @@
+{
+  "info": {
+    "_postman_id": "b55cf190-9fe4-4ca5-97c0-ed40b1ea1aae",
+    "name": "API Mundial 2026",
+    "description": "Flujo listo para ejecutar en orden. Login guarda el JWT; Lista de eventos guarda un eventId; Detalle guarda una selectionId; Notificaciones guarda un notificationId.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "01 - Autenticación",
+      "item": [
+        {
+          "name": "Login",
+          "event": [{
+            "listen": "test",
+            "script": { "exec": [
+              "pm.test('Login correcto', () => pm.response.to.have.status(201));",
+              "const body = pm.response.json();",
+              "pm.environment.set('token', body.accessToken);"
+            ], "type": "text/javascript" }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"demo@apuestatotal.test\",\n  \"password\": \"Demo12345!\"\n}" },
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 - Eventos",
+      "item": [
+        {
+          "name": "Listar eventos",
+          "event": [{
+            "listen": "test",
+            "script": { "exec": [
+              "pm.test('Lista obtenida', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "const event = body.data.find(item => item.isBettable) || body.data.find(item => item.hasMarkets) || body.data[0];",
+              "if (event) pm.environment.set('eventId', event.id);"
+            ], "type": "text/javascript" }
+          }],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/events?from=2026-06-11T00%3A00%3A00Z&to=2028-01-01T00%3A00%3A00Z&page=1&limit=100",
+              "host": ["{{baseUrl}}"], "path": ["events"],
+              "query": [
+                { "key": "from", "value": "2026-06-11T00:00:00Z" },
+                { "key": "to", "value": "2028-01-01T00:00:00Z" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "100" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Detalle del evento",
+          "event": [{
+            "listen": "test",
+            "script": { "exec": [
+              "pm.test('Detalle obtenido', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "const market = (body.markets || []).find(item => item.selections && item.selections.length);",
+              "const selection = market && (market.selections.find(item => item.isAvailable) || market.selections[0]);",
+              "if (selection) pm.environment.set('selectionId', selection.id);",
+              "const unavailable = (body.markets || []).flatMap(item => item.selections || []).find(item => item.isAvailable === false);",
+              "if (unavailable) pm.environment.set('unavailableSelectionId', unavailable.id);"
+            ], "type": "text/javascript" }
+          }],
+          "request": {
+            "method": "GET", "header": [],
+            "url": { "raw": "{{baseUrl}}/events/{{eventId}}", "host": ["{{baseUrl}}"], "path": ["events", "{{eventId}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 - Cupón",
+      "item": [
+        {
+          "name": "Calcular apuesta simple",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"type\": \"SINGLE\",\n  \"stake\": \"10.00\",\n  \"selectionIds\": [\"{{selectionId}}\"]\n}" },
+            "url": { "raw": "{{baseUrl}}/betslip/calculate", "host": ["{{baseUrl}}"], "path": ["betslip", "calculate"] }
+          }
+        },
+        {
+          "name": "Validar selección no disponible (422)",
+          "event": [{
+            "listen": "test",
+            "script": { "exec": [
+              "pm.test('Devuelve HTTP 422', () => pm.response.to.have.status(422));",
+              "const body = pm.response.json();",
+              "pm.test('Código SELECTION_UNAVAILABLE', () => pm.expect(body.code).to.eql('SELECTION_UNAVAILABLE'));",
+              "pm.test('Identifica la selección enviada', () => pm.expect(body.details.selectionId).to.eql(pm.environment.get('unavailableSelectionId')));"
+            ], "type": "text/javascript" }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"type\": \"SINGLE\",\n  \"stake\": \"10.00\",\n  \"selectionIds\": [\"{{unavailableSelectionId}}\"]\n}" },
+            "url": { "raw": "{{baseUrl}}/betslip/calculate", "host": ["{{baseUrl}}"], "path": ["betslip", "calculate"] }
+          }
+        },
+        {
+          "name": "Confirmar apuesta",
+          "request": {
+            "method": "POST",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }] },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{$guid}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"type\": \"SINGLE\",\n  \"stake\": \"10.00\",\n  \"selectionIds\": [\"{{selectionId}}\"]\n}" },
+            "url": { "raw": "{{baseUrl}}/betslip/place", "host": ["{{baseUrl}}"], "path": ["betslip", "place"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 - Cuenta",
+      "item": [
+        {
+          "name": "Consultar saldo",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }] },
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/balance", "host": ["{{baseUrl}}"], "path": ["balance"] }
+          }
+        },
+        {
+          "name": "Listar notificaciones",
+          "event": [{
+            "listen": "test",
+            "script": { "exec": [
+              "pm.test('Notificaciones obtenidas', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "const list = Array.isArray(body) ? body : body.data;",
+              "if (list && list[0]) pm.environment.set('notificationId', list[0].id);"
+            ], "type": "text/javascript" }
+          }],
+          "request": {
+            "method": "GET",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }] },
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/notifications", "host": ["{{baseUrl}}"], "path": ["notifications"] }
+          }
+        },
+        {
+          "name": "Marcar notificación como leída",
+          "request": {
+            "method": "PATCH",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }] },
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/notifications/{{notificationId}}/read", "host": ["{{baseUrl}}"], "path": ["notifications", "{{notificationId}}", "read"] }
+          }
+        }
+      ]
+    }
+  ]
+}

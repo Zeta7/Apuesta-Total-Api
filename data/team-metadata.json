@@ -1,0 +1,6 @@
+{
+  "México": { "countryCode": "MX", "fifaCode": "MEX", "shortName": "México" },
+  "Sudáfrica": { "countryCode": "ZA", "fifaCode": "RSA", "shortName": "Sudáfrica" },
+  "Argentina": { "countryCode": "AR", "fifaCode": "ARG", "shortName": "Argentina" },
+  "Argelia": { "countryCode": "DZ", "fifaCode": "ALG", "shortName": "Argelia" }
+}
